@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="th" class="h-full bg-zinc-50">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Personal Assistant</title>
+  
+  <!-- Fonts: Inter & Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- LINE LIFF SDK -->
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'Prompt', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              500: '#10b981',
+              600: '#059669',
+              900: '#064e3b',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* ซ่อน Scrollbar แต่อรรถประโยชน์ยังเลื่อนได้ */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    /* Animation สำหรับ Fade In */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade {
+      animation: fadeIn 0.2s ease-out forwards;
+    }
+  </style>
+</head>
+
+<body class="h-full text-zinc-900 flex flex-col max-w-md mx-auto bg-white shadow-xl shadow-zinc-200/50 min-h-screen relative antialiased selection:bg-zinc-900 selection:text-white">
+
+  <!-- ================= TOP NAVIGATION (MINIMAL HEADER) ================= -->
+  <header class="px-5 pt-6 pb-4 bg-white/80 backdrop-blur-md sticky top-0 z-20 border-b border-zinc-100 flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <div id="userAvatarContainer" class="w-9 h-9 rounded-full bg-zinc-100 flex items-center justify-center overflow-hidden border border-zinc-200/60">
+        <i data-lucide="user" class="w-5 h-5 text-zinc-400"></i>
+      </div>
+      <div>
+        <h1 class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Personal Assistant</h1>
+        <p id="userName" class="text-sm font-semibold text-zinc-800">ตารางงานของฉัน</p>
+      </div>
+    </div>
+    
+    <!-- ปุ่มรีเฟรช -->
+    <button onclick="fetchTasks()" class="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition active:scale-95" title="รีเฟรช">
+      <i data-lucide="rotate-cw" id="refreshIcon" class="w-4 h-4"></i>
+    </button>
+  </header>
+
+  <!-- ================= TAB SELECTOR (MINIMAL PILL) ================= -->
+  <div class="px-5 pt-3 pb-2 bg-white sticky top-[65px] z-10">
+    <div class="grid grid-cols-3 p-1 bg-zinc-100/80 rounded-xl text-xs font-medium text-zinc-500">
+      <button onclick="switchTab('today')" id="tabToday" class="py-2 rounded-lg transition-all duration-200 text-zinc-900 bg-white shadow-sm font-semibold">
+        วันนี้ <span id="countToday" class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-zinc-100 text-zinc-600">0</span>
+      </button>
+      <button onclick="switchTab('upcoming')" id="tabUpcoming" class="py-2 rounded-lg transition-all duration-200 hover:text-zinc-800">
+        เร็วๆ นี้ <span id="countUpcoming" class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-transparent text-zinc-400">0</span>
+      </button>
+      <button onclick="switchTab('history')" id="tabHistory" class="py-2 rounded-lg transition-all duration-200 hover:text-zinc-800">
+        เสร็จสิ้น <span id="countHistory" class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-transparent text-zinc-400">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= MAIN CONTENT LIST ================= -->
+  <main class="flex-1 px-5 py-3 overflow-y-auto no-scrollbar space-y-2.5 pb-24">
+    <!-- กล่องแสดงสถานะ Loading -->
+    <div id="loadingState" class="py-16 text-center space-y-3">
+      <div class="inline-block animate-spin rounded-full h-6 w-6 border-2 border-zinc-200 border-t-zinc-900"></div>
+      <p class="text-xs text-zinc-400">กำลังซิงค์ข้อมูลกับ Google Sheets...</p>
+    </div>
+
+    <!-- กล่องแสดงเมื่อไม่มีงาน (Empty State) -->
+    <div id="emptyState" class="hidden py-20 text-center space-y-2">
+      <div class="w-12 h-12 mx-auto rounded-2xl bg-zinc-50 border border-zinc-100 flex items-center justify-center text-zinc-300">
+        <i data-lucide="check" class="w-6 h-6"></i>
+      </div>
+      <p class="text-sm font-medium text-zinc-600 pt-2">ไม่มีภารกิจในหมวดนี้</p>
+      <p class="text-xs text-zinc-400">กดปุ่ม + ด้านล่างเพื่อเพิ่มนัดหมายใหม่</p>
+    </div>
+
+    <!-- รายการการ์ดงาน -->
+    <div id="taskList" class="space-y-2.5"></div>
+  </main>
+
+  <!-- ================= FLOATING ACTION BUTTON (+ เพิ่มงาน) ================= -->
+  <div class="fixed bottom-6 max-w-md w-full px-5 pointer-events-none z-30">
+    <button onclick="openModal()" class="pointer-events-auto w-full py-3.5 px-4 bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] text-white rounded-2xl font-medium text-sm shadow-xl shadow-zinc-900/15 flex items-center justify-center space-x-2 transition duration-200">
+      <i data-lucide="plus" class="w-4 h-4"></i>
+      <span>เพิ่มภารกิจใหม่</span>
+    </button>
+  </div>
+
+  <!-- ================= MODAL: ADD / EDIT TASK ================= -->
+  <div id="taskModal" class="fixed inset-0 bg-zinc-900/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden transition-opacity duration-200">
+    <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl space-y-5 animate-fade max-h-[90vh] overflow-y-auto no-scrollbar">
+      
+      <div class="flex items-center justify-between border-b border-zinc-100 pb-3">
+        <h2 id="modalTitle" class="text-base font-semibold text-zinc-900">เพิ่มนัดหมายใหม่</h2>
+        <button onclick="closeModal()" class="w-7 h-7 rounded-full text-zinc-400 hover:text-zinc-600 flex items-center justify-center hover:bg-zinc-100">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <form id="taskForm" onsubmit="handleFormSubmit(event)" class="space-y-4 text-left">
+        <input type="hidden" id="formTaskId">
+
+        <!-- ชื่องาน -->
+        <div>
+          <label class="block text-xs font-medium text-zinc-500 mb-1.5">ชื่องานหรือรายละเอียดนัดหมาย</label>
+          <input type="text" id="formTaskTitle" required placeholder="เช่น ประชุมวางแผนประจำสัปดาห์" 
+            class="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 transition">
+        </div>
+
+        <!-- วันและเวลาเป้าหมาย -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">วันที่</label>
+            <input type="date" id="formTaskDate" required 
+              class="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-900 transition">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">เวลา</label>
+            <input type="time" id="formTaskTime" required 
+              class="w-full px-3 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-900 transition">
+          </div>
+        </div>
+
+        <!-- ตัวเลือกเตือนล่วงหน้า -->
+        <div>
+          <label class="block text-xs font-medium text-zinc-500 mb-1.5">แจ้งเตือนล่วงหน้า</label>
+          <select id="formTaskRemind" class="w-full px-3.5 py-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-900 transition">
+            <option value="0">เมื่อถึงเวลาพอดี</option>
+            <option value="15" selected>ล่วงหน้า 15 นาที</option>
+            <option value="30">ล่วงหน้า 30 นาที</option>
+            <option value="60">ล่วงหน้า 1 ชั่วโมง</option>
+            <option value="1440">ล่วงหน้า 1 วัน</option>
+          </select>
+        </div>
+
+        <!-- ซิงค์ลง Google Calendar -->
+        <div class="flex items-center justify-between pt-1">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="calendar" class="w-4 h-4 text-zinc-400"></i>
+            <span class="text-xs font-medium text-zinc-700">ซิงค์ลง Google Calendar</span>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="formTaskSync" checked class="sr-only peer">
+            <div class="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-zinc-900"></div>
+          </label>
+        </div>
+
+        <!-- ปุ่มบันทึก -->
+        <div class="pt-3">
+          <button type="submit" id="btnSubmitForm" class="w-full py-3 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-sm rounded-xl transition active:scale-[0.99] flex items-center justify-center space-x-2">
+            <span>บันทึกข้อมูล</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= APPLICATION LOGIC (VANILLA JS) ================= -->
+  <script>
+    // =========================================================================
+    // ⚙️ CONFIGURATION: วาง Web App URL ของคุณที่นี่
+    // =========================================================================
+    const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycby8BstVkspAfLLXbFBwqPULl8kGZ-w7k8Nq6T7Y66M_X9L1fA/exec';
+    const LIFF_ID = ''; // ใส่ LIFF ID ถ้าลงทะเบียนใน LINE Developers แล้ว (ถ้ายังไม่ใส่จะใช้ Demo User ID ให้ทดสอบได้ทันที)
+    
+    // Default Owner ID ที่ทดสอบผ่านใน Phase 2/3
+    let CURRENT_USER_ID = 'Uc288041bd32e3b115eda7747ef483676';
+    
+    let allActiveTasks = [];
+    let allHistoryTasks = [];
+    let currentTab = 'today';
+
+    // 1. เริ่มต้นระบบ (LIFF Init)
+    window.addEventListener('DOMContentLoaded', async () => {
+      lucide.createIcons();
+      initLiff();
+      fetchTasks();
+    });
+
+    async function initLiff() {
+      if (typeof liff !== 'undefined' && LIFF_ID) {
+        try {
+          await liff.init({ liffId: LIFF_ID });
+          if (liff.isLoggedIn()) {
+            const profile = await liff.getProfile();
+            CURRENT_USER_ID = profile.userId;
+            document.getElementById('userName').innerText = profile.displayName || 'ของฉัน';
+            if (profile.pictureUrl) {
+              document.getElementById('userAvatarContainer').innerHTML = `<img src="${profile.pictureUrl}" class="w-full h-full object-cover">`;
+            }
+          }
+        } catch (e) {
+          console.warn('LIFF Init fallback mode:', e);
+        }
+      }
+    }
+
+    // 2. ดึงข้อมูลจาก Google Apps Script
+    async function fetchTasks() {
+      const refreshIcon = document.getElementById('refreshIcon');
+      refreshIcon.classList.add('animate-spin');
+      document.getElementById('loadingState').classList.remove('hidden');
+      document.getElementById('taskList').classList.add('hidden');
+      document.getElementById('emptyState').classList.add('hidden');
+
+      try {
+        // ดึงงานที่ยังไม่เสร็จ (Active)
+        const resActive = await fetch(`${GAS_WEBAPP_URL}?action=get_tasks&userId=${CURRENT_USER_ID}`);
+        const dataActive = await resActive.json();
+        allActiveTasks = dataActive.tasks || [];
+
+        // ดึงประวัติงานที่เสร็จแล้ว (History)
+        const resHistory = await fetch(`${GAS_WEBAPP_URL}?action=get_history&userId=${CURRENT_USER_ID}&limit=30`);
+        const dataHistory = await resHistory.json();
+        allHistoryTasks = dataHistory.tasks || [];
+
+        renderCounts();
+        renderTaskList();
+      } catch (err) {
+        console.error('Fetch error:', err);
+      } finally {
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('taskList').classList.remove('hidden');
+        refreshIcon.classList.remove('animate-spin');
+      }
+    }
+
+    // 3. คำนวณจำนวนงานและอัปเดต Badge
+    function renderCounts() {
+      const todayStr = getTodayThaiDateStr();
+      const todayTasks = allActiveTasks.filter(t => normalizeDateStr(t.targetTime).startsWith(todayStr));
+      const upcomingTasks = allActiveTasks.filter(t => !normalizeDateStr(t.targetTime).startsWith(todayStr));
+
+      document.getElementById('countToday').innerText = todayTasks.length;
+      document.getElementById('countUpcoming').innerText = upcomingTasks.length;
+      document.getElementById('countHistory').innerText = allHistoryTasks.length;
+    }
+
+    // 4. แสดงผลรายการการ์ดงานตามแท็บที่เลือก
+    function renderTaskList() {
+      const taskContainer = document.getElementById('taskList');
+      taskContainer.innerHTML = '';
+
+      const todayStr = getTodayThaiDateStr();
+      let displayTasks = [];
+
+      if (currentTab === 'today') {
+        displayTasks = allActiveTasks.filter(t => normalizeDateStr(t.targetTime).startsWith(todayStr));
+      } else if (currentTab === 'upcoming') {
+        displayTasks = allActiveTasks.filter(t => !normalizeDateStr(t.targetTime).startsWith(todayStr));
+      } else if (currentTab === 'history') {
+        displayTasks = allHistoryTasks;
+      }
+
+      if (displayTasks.length === 0) {
+        document.getElementById('emptyState').classList.remove('hidden');
+        return;
+      }
+
+      document.getElementById('emptyState').classList.add('hidden');
+
+      displayTasks.forEach(task => {
+        const timeStr = normalizeDateStr(task.targetTime);
+        const isHistory = currentTab === 'history';
+
+        const card = document.createElement('div');
+        card.className = 'p-4 rounded-2xl border border-zinc-100 bg-white hover:border-zinc-200 transition shadow-sm flex items-start justify-between group';
+
+        card.innerHTML = `
+          <div class="flex items-start space-x-3 flex-1 min-w-0 pr-2">
+            ${!isHistory ? `
+              <button onclick="handleCompleteTask('${task.id}')" class="mt-0.5 w-5 h-5 rounded-md border border-zinc-300 hover:border-emerald-600 hover:bg-emerald-50 text-emerald-600 flex items-center justify-center transition active:scale-90" title="ทำเครื่องหมายว่าเสร็จแล้ว">
+                <i data-lucide="check" class="w-3.5 h-3.5 opacity-0 hover:opacity-100"></i>
+              </button>
+            ` : `
+              <div class="mt-0.5 w-5 h-5 rounded-md bg-zinc-100 text-zinc-400 flex items-center justify-center">
+                <i data-lucide="check" class="w-3.5 h-3.5"></i>
+              </div>
+            `}
+            
+            <div class="min-w-0 flex-1">
+              <p class="text-sm font-medium ${isHistory ? 'line-through text-zinc-400' : 'text-zinc-800'} truncate">
+                ${task.task}
+              </p>
+              
+              <div class="flex items-center space-x-3 mt-1 text-[11px] text-zinc-400">
+                <span class="flex items-center space-x-1">
+                  <i data-lucide="clock" class="w-3 h-3"></i>
+                  <span>${formatDisplayDateTime(timeStr)}</span>
+                </span>
+                ${task.calendarEventId ? `
+                  <span class="flex items-center space-x-1 text-emerald-600/80 font-medium">
+                    <i data-lucide="calendar" class="w-3 h-3"></i>
+                    <span>Calendar</span>
+                  </span>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+
+          ${!isHistory ? `
+            <div class="flex items-center space-x-1">
+              <button onclick="handleDeleteTask('${task.id}')" class="p-1.5 text-zinc-300 hover:text-red-500 rounded-lg hover:bg-red-50 transition" title="ลบงาน">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          ` : ''}
+        `;
+
+        taskContainer.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+
+    // 5. สลับแท็บ
+    function switchTab(tab) {
+      currentTab = tab;
+      ['today', 'upcoming', 'history'].forEach(t => {
+        const btn = document.getElementById('tab' + capitalize(t));
+        if (t === tab) {
+          btn.className = 'py-2 rounded-lg transition-all duration-200 text-zinc-900 bg-white shadow-sm font-semibold';
+        } else {
+          btn.className = 'py-2 rounded-lg transition-all duration-200 hover:text-zinc-800';
+        }
+      });
+      renderTaskList();
+    }
+
+    // 6. Action: กดปุ่มเสร็จแล้ว
+    async function handleCompleteTask(taskId) {
+      try {
+        await postApi({
+          action: 'complete_task',
+          id: taskId,
+          userId: CURRENT_USER_ID
+        });
+        fetchTasks();
+      } catch (err) {
+        alert('เกิดข้อผิดพลาดในการอัปเดต');
+      }
+    }
+
+    // 7. Action: ลบงาน
+    async function handleDeleteTask(taskId) {
+      if (!confirm('ต้องการลบภารกิจนี้ใช่หรือไม่?')) return;
+      try {
+        await postApi({
+          action: 'delete_task',
+          id: taskId,
+          userId: CURRENT_USER_ID
+        });
+        fetchTasks();
+      } catch (err) {
+        alert('เกิดข้อผิดพลาดในการลบ');
+      }
+    }
+
+    // 8. Action: ส่งฟอร์มสร้างงานใหม่
+    async function handleFormSubmit(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btnSubmitForm');
+      btn.disabled = true;
+      btn.innerText = 'กำลังบันทึก...';
+
+      const task = document.getElementById('formTaskTitle').value.trim();
+      const date = document.getElementById('formTaskDate').value;
+      const time = document.getElementById('formTaskTime').value;
+      const remind = document.getElementById('formTaskRemind').value;
+      const syncCal = document.getElementById('formTaskSync').checked;
+
+      const targetTime = `${date} ${time}`;
+
+      try {
+        await postApi({
+          action: 'create_task',
+          userId: CURRENT_USER_ID,
+          task: task,
+          targetTime: targetTime,
+          remindBeforeMin: Number(remind),
+          repeatType: 'NONE',
+          syncCalendar: syncCal
+        });
+
+        closeModal();
+        fetchTasks();
+      } catch (err) {
+        alert('บันทึกไม่สำเร็จ: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'บันทึกข้อมูล';
+      }
+    }
+
+    // API Helper: ส่ง POST ไปยัง Apps Script โดยไม่มี CORS Preflight
+    async function postApi(payload) {
+      const res = await fetch(GAS_WEBAPP_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      return await res.json();
+    }
+
+    // Modal Control
+    function openModal() {
+      // ตั้งค่าวันเวลาเริ่มต้นเป็นวันนี้ + 1 ชั่วโมง
+      const now = new Date();
+      now.setHours(now.getHours() + 1, 0, 0, 0);
+
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const hh = String(now.getHours()).padStart(2, '0');
+
+      document.getElementById('formTaskDate').value = `${yyyy}-${mm}-${dd}`;
+      document.getElementById('formTaskTime').value = `${hh}:00`;
+      document.getElementById('formTaskTitle').value = '';
+
+      document.getElementById('taskModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('taskModal').classList.add('hidden');
+    }
+
+    // Utilities
+    function normalizeDateStr(val) {
+      if (!val) return '';
+      return String(val).trim();
+    }
+
+    function getTodayThaiDateStr() {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function formatDisplayDateTime(str) {
+      if (!str || str.length < 16) return str;
+      const datePart = str.substring(5, 10); // MM-DD
+      const timePart = str.substring(11, 16); // HH:mm
+      return `${datePart} เวลา ${timePart}`;
+    }
+
+    function capitalize(s) {
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }
+  </script>
+</body>
+</html>
